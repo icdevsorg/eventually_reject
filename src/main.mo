@@ -8,6 +8,7 @@ import AccountIdentifier "mo:principal/AccountIdentifier";
 import Result "mo:base/Result";
 import Error "mo:base/Error";
 import Buffer "mo:base/Buffer";
+import Debug "mo:base/Debug";
 import Int "mo:base/Int";
 import Iter "mo:base/Iter";
 import Nat64 "mo:base/Nat64";
@@ -62,19 +63,27 @@ shared (deployer) actor class QuickList() = this {
       };
      //initialize the timers
       ignore Set.put(state_current.log, Set.thash, Int.toText(Time.now()) # "Running checkForNewVotes");
-      let open_items = await gov.list_proposals({
-        include_reward_status = [1];
-        before_proposal = null;
-        limit = 1000;
-        exclude_topic = [2];
-        include_status = [
-          0 : Int32,
-          1 : Int32,
-          2 : Int32,
-          3 : Int32,
-          4 : Int32
-        ];
-      });
+      let open_items = try{
+          await gov.list_proposals({
+          include_reward_status = [1];
+          omit_large_fields = ?true;
+          before_proposal = null;
+          limit = 1000;
+          exclude_topic = [2];
+          include_all_manage_neuron_proposals = ?false;
+          include_status = [
+            0 : Int32,
+            1 : Int32,
+            2 : Int32,
+            3 : Int32,
+            4 : Int32
+          ];
+        });
+      } catch (e){
+        state_current.newTimer := Timer.setTimer(#seconds(eight_hours/100000000), checkForNewVotes);
+        ignore Set.put(state_current.log, Set.thash, Int.toText(Time.now()) # " Error calling governance:" # Error.message(e));
+        return;
+      };
 
       label process for(thisItem in open_items.proposal_info.vals()){
 
@@ -104,10 +113,18 @@ shared (deployer) actor class QuickList() = this {
 
       if(Map.size(state_current.pending) > 0){
         ignore Set.put(state_current.log, Set.thash, Int.toText(Time.now()) # " Found Needed Votes:" # Nat.toText(Map.size(state_current.pending)));
-        await* processVotes();
+        try{
+          await* processVotes();
+        } catch(e){
+          state_current.newTimer := Timer.setTimer(#seconds(eight_hours/100000000), checkForNewVotes);
+        ignore Set.put(state_current.log, Set.thash, Int.toText(Time.now()) # " Error processing votes " # Error.message(e)); 
+        return;
+        };
       };
     } catch (e){
       ignore Set.put(state_current.log, Set.thash, Int.toText(Time.now()) # " Error Occured in check: " # Error.message(e));
+      state_current.newTimer := Timer.setTimer(#seconds(eight_hours/100000000), checkForNewVotes);
+      return;
     };
   };
 
@@ -166,11 +183,6 @@ shared (deployer) actor class QuickList() = this {
  
   // Handles http request
   public query(msg) func http_request(rawReq: Types.HttpRequest): async (Types.HTTPResponse) {
-
-
-    
-    
-
 
         let main_text = Buffer.Buffer<Text>(1);
         
