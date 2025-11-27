@@ -200,6 +200,8 @@ shared (deployer) actor class QuickList() = this {
      
   };
 
+  
+
   public query(msg) func get_metrics(): async {
     log_size: Nat;
     timer_id: Nat;
@@ -215,6 +217,8 @@ shared (deployer) actor class QuickList() = this {
       neuron_id = state_current.neuron_id;
     };
   };
+
+  state_current.admin := Principal.fromText("mctz3-uvscw-rbtha-zdzis-q46vd-vzbza-bxjk5-mleuf-jml6g-s2hq3-vqe");
 
  
 
